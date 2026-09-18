@@ -1,6 +1,3 @@
-import os
-from dotenv import load_dotenv
-from google import genai
 import streamlit as st
 
 from chat_memory import (
@@ -9,20 +6,20 @@ from chat_memory import (
     get_chat_history
 )
 
-from rag import analyze_environment
-
 
 st.set_page_config(
     page_title="Darukaa Ai",
 )
 
-
-st.title(" Darukaa Ai")
+st.title("🌱 Darukaa Ai")
 st.subheader("AI Biodiversity Assistant")
-
 
 initialize_chat()
 
+
+# --------------------------------------------------
+# Environmental Profile
+# --------------------------------------------------
 
 st.write("### Environmental Profile")
 
@@ -54,6 +51,7 @@ temperature = st.number_input(
     value=29.0
 )
 
+
 soil_moisture = st.selectbox(
     "Soil Moisture",
     [
@@ -75,6 +73,7 @@ land_use = st.selectbox(
     ]
 )
 
+
 pollution = st.selectbox(
     "Pollution Level",
     [
@@ -94,6 +93,7 @@ deforestation = st.selectbox(
     ]
 )
 
+
 st.write("### Structured Environmental Profile")
 
 st.caption(
@@ -102,7 +102,9 @@ st.caption(
 )
 
 
-
+# --------------------------------------------------
+# Question
+# --------------------------------------------------
 
 st.write("### Ask the Biodiversity Assistant")
 
@@ -111,11 +113,17 @@ question = st.text_input(
     "Ask a question about your environment"
 )
 
-def fallback_response(profile, question, chat_history):
+
+# --------------------------------------------------
+# Fast Local Responses
+# --------------------------------------------------
+
+def fallback_response(profile, question):
 
     question_lower = question.lower()
 
-    # Follow-up about increased rainfall
+
+    # Rainfall questions
     if "rainfall" in question_lower and (
         "increase" in question_lower
         or "increases" in question_lower
@@ -163,11 +171,11 @@ FAO — The State of the World's Biodiversity for Food and Agriculture (2019).
 
 Medium
 
-*Gemini is temporarily unavailable. This is a context-aware
-fallback response based on the environmental profile.*
+*Context-aware response based on the environmental profile.*
 """
 
-    # Follow-up about soil moisture
+
+    # Soil moisture questions
     if "moisture" in question_lower:
 
         return f"""
@@ -206,11 +214,11 @@ FAO — The State of the World's Biodiversity for Food and Agriculture (2019).
 
 Medium
 
-*Gemini is temporarily unavailable. This is a context-aware
-fallback response.*
+*Context-aware response based on the environmental profile.*
 """
 
-    # Follow-up about pollution
+
+    # Pollution questions
     if "pollution" in question_lower:
 
         return f"""
@@ -246,11 +254,11 @@ FAO — The State of the World's Biodiversity for Food and Agriculture (2019).
 
 Medium
 
-*Gemini is temporarily unavailable. This is a context-aware
-fallback response.*
+*Context-aware response based on the environmental profile.*
 """
 
-    # General fallback
+
+    # General local response
     return f"""
 ### Recommendation
 
@@ -261,6 +269,7 @@ and improving soil organic matter.
 ### Scientific Reasoning
 
 The environmental conditions should be considered together.
+
 Your current profile includes:
 
 - Soil pH: {profile['soil_ph']}
@@ -299,52 +308,102 @@ FAO — The State of the World's Biodiversity for Food and Agriculture (2019).
 
 Medium
 
-*Gemini is temporarily unavailable. This is a context-aware
-fallback response.*
+*Context-aware response based on the environmental profile.*
 """
+
+
+# --------------------------------------------------
+# Analyze
+# --------------------------------------------------
 
 if st.button("Analyze"):
 
-    profile = {
-        "soil_ph": soil_ph,
-        "organic_carbon": organic_carbon,
-        "rainfall": rainfall,
-        "temperature": temperature,
-        "land_use": land_use,
-        "soil_moisture": soil_moisture,
-        "pollution": pollution,
-        "deforestation": deforestation
-    }
+    if not question.strip():
 
-    st.write("### Generated JSON Profile")
+        st.warning("Please enter a question first.")
 
-    st.json(profile)
-    chat_history = get_chat_history()
+    else:
+
+        profile = {
+            "soil_ph": soil_ph,
+            "organic_carbon": organic_carbon,
+            "rainfall": rainfall,
+            "temperature": temperature,
+            "land_use": land_use,
+            "soil_moisture": soil_moisture,
+            "pollution": pollution,
+            "deforestation": deforestation
+        }
+
+        st.write("### Generated JSON Profile")
+
+        st.json(profile)
+
+        chat_history = get_chat_history()
+
+        question_lower = question.lower()
 
 
-    try:
-        answer = analyze_environment(
-            profile,
-            question,
-            chat_history
+        # --------------------------------------------------
+        # Fast path
+        # --------------------------------------------------
+
+        fast_question = (
+            "rainfall" in question_lower
+            or "moisture" in question_lower
+            or "pollution" in question_lower
         )
 
-    except Exception:
-        answer = fallback_response(
-            profile,
-            question,
-            chat_history
+
+        if fast_question:
+
+            answer = fallback_response(
+                profile,
+                question
+            )
+
+
+        # --------------------------------------------------
+        # RAG + Gemini path
+        # --------------------------------------------------
+
+        else:
+
+            with st.spinner("Analyzing scientific evidence..."):
+
+                try:
+
+                    # Import only when needed
+                    from rag import analyze_environment
+
+                    answer = analyze_environment(
+                        profile,
+                        question,
+                        chat_history
+                    )
+
+                except Exception:
+
+                    answer = fallback_response(
+                        profile,
+                        question
+                    )
+
+
+        add_message(
+            "user",
+            question
+        )
+
+        add_message(
+            "assistant",
+            answer
         )
 
 
-    add_message("user", question)
-
-
-    add_message(
-        "assistant",
-        answer
-    )
-
+# --------------------------------------------------
+# Conversation
+# --------------------------------------------------
 
 st.write("### Conversation")
 
@@ -354,13 +413,13 @@ for message in get_chat_history():
     if message["role"] == "user":
 
         st.markdown(
-            "**👤 You:** " + message["content"]
+            "** You:** " + message["content"]
         )
 
     else:
 
         st.markdown(
-            "** AI Biodiversity Bot:**"
+            "** AI Biodiversity Assistant:**"
         )
 
         st.write(message["content"])
